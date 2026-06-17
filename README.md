@@ -21,11 +21,11 @@ Live demo: [vitaflow-crm on Streamlit Cloud](https://vitaflow-crm-rochelle24crea
 
 VitaFlow CRM is a fully functional customer dashboard with:
 
-- **Customers tab** — filterable table of 92 fake customers with health scores, CSAT, MRR, plans, and roles. Select any customer from the dropdown to view their full profile, linked support incidents, and sales leads.
+- **Customers tab** — filterable table of 91 fake customers with health scores, CSAT, MRR, plans, and roles. Select any customer from the dropdown to view their full profile, linked support incidents, and sales leads.
 - **Sales Leads tab** — 14 fictional sales opportunities with pipeline stage, value, and owner tracking.
 - **Support Incidents tab** — 20 fictional support tickets with type, status, priority, and CSAT tracking.
 - **Activity tab** — a chronological feed of recent CRM events.
-- **Add / Remove / Flag customers** — full CRUD operations with persistent storage backed by Supabase (PostgreSQL).
+- **Add / Remove / Flag customers** — full CRUD operations with persistent storage backed by [Supabase](https://supabase.com) (PostgreSQL). New customers survive app restarts and redeploys.
 
 ---
 
@@ -35,7 +35,7 @@ VitaFlow CRM is a fully functional customer dashboard with:
 |---|---|
 | App framework | [Streamlit](https://streamlit.io) (Python) |
 | Backend (original prototype) | [Flask](https://flask.palletsprojects.com) (Python) |
-| Database | [Supabase](https://supabase.com) (PostgreSQL) via `psycopg2` |
+| Database | [Supabase](https://supabase.com) (PostgreSQL) via [`supabase-py`](https://github.com/supabase-community/supabase-py) |
 | Data manipulation | [pandas](https://pandas.pydata.org) |
 | Frontend (original prototype) | HTML, CSS, JavaScript |
 | Version control | Git / GitHub |
@@ -49,7 +49,7 @@ All seed data in this project is **synthetically generated** — no real dataset
 
 | Dataset | Description | Size | Storage |
 |---|---|---|---|
-| Customers | Fictional health & wellness app users with names, emails, cities, plans, MRR, health scores, CSAT, NPS, session counts, login history, and wellness goals | 92 seed records | **Supabase (PostgreSQL)** — live, persistent. New customers added through the app are saved permanently. |
+| Customers | Fictional health & wellness app users with names, emails, cities, plans, MRR, health scores, CSAT, NPS, session counts, login history, and wellness goals | 91 seed records | **Supabase (PostgreSQL)** — live, persistent. New customers added through the app are saved permanently. |
 | Account Managers | Fictional CRM account managers assigned to customers | 10 records | Static (in code) |
 | Sales Leads | Fictional upsell and expansion opportunities linked to customers | 14 records | Static (in code) |
 | Support Incidents | Fictional customer support tickets with type, status, and priority | 20 records | Static (in code) |
@@ -69,9 +69,44 @@ All seed data in this project is **synthetically generated** — no real dataset
 
 ---
 
-## How to Run Locally
+## Database Setup (Supabase)
 
-**Prerequisites:** A Supabase project with the `customers` table (auto-created on first run).
+The app connects to Supabase over HTTPS using `supabase-py`. Before running for the first time, create the `customers` table by running this SQL once in your **[Supabase SQL Editor](https://supabase.com/dashboard/project/yoqusbndnvzhydvhqgtk/sql/new)**:
+
+```sql
+CREATE TABLE IF NOT EXISTS customers (
+    id          SERIAL PRIMARY KEY,
+    name        TEXT    NOT NULL,
+    email       TEXT    NOT NULL,
+    status      TEXT    DEFAULT 'Trial',
+    plan        TEXT    DEFAULT 'Starter',
+    mrr         INTEGER DEFAULT 0,
+    score       INTEGER DEFAULT 50,
+    csat        REAL    DEFAULT 3.5,
+    since       TEXT,
+    city        TEXT    DEFAULT '',
+    age         INTEGER DEFAULT 0,
+    goals       TEXT    DEFAULT '',
+    sessions    INTEGER DEFAULT 0,
+    nps         INTEGER DEFAULT 7,
+    role        TEXT    DEFAULT 'Member',
+    username    TEXT,
+    last_login  TEXT,
+    login_age   INTEGER DEFAULT 999,
+    am_idx      INTEGER DEFAULT 0,
+    flagged     INTEGER DEFAULT 0,
+    flag_note   TEXT,
+    created_at  TEXT    DEFAULT NOW()::TEXT
+);
+
+ALTER TABLE customers DISABLE ROW LEVEL SECURITY;
+```
+
+After the table exists, the app automatically seeds it with the 91 initial customers on first launch.
+
+---
+
+## How to Run Locally
 
 ```bash
 # 1. Clone the repo
@@ -85,17 +120,29 @@ conda activate vitaflow-crm
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. Add your Supabase connection string
-# Create .streamlit/secrets.toml with:
+# 4. Add your Supabase credentials
+# Create the file .streamlit/secrets.toml with:
+#
 # [supabase]
-# connection_string = "postgresql://postgres:PASSWORD@db.YOUR_REF.supabase.co:5432/postgres"
+# url = "https://<your-project-ref>.supabase.co"
+# key = "sb_publishable_..."   ← anon/public key from Supabase Settings → API
 
 # 5. Run the Streamlit app
 streamlit run streamlit_app.py
 ```
 
 Then open [http://localhost:8501](http://localhost:8501) in your browser.  
-On first run the app will automatically create the `customers` table and seed it with 92 records.
+On first run the app will automatically seed the `customers` table with 91 records if it is empty.
+
+### Streamlit Cloud secrets
+
+In your Streamlit Cloud app settings, add the following under **Secrets**:
+
+```toml
+[supabase]
+url = "https://<your-project-ref>.supabase.co"
+key = "sb_publishable_..."
+```
 
 ---
 
@@ -104,16 +151,25 @@ On first run the app will automatically create the `customers` table and seed it
 ```
 vitaflow-crm/
 ├── streamlit_app.py       # Main Streamlit application (Supabase-backed)
-├── data.py                # Synthetic customer seed data
+├── data.py                # Synthetic customer seed data (91 records)
 ├── app.py                 # Original Flask backend (kept for reference)
 ├── templates/
 │   └── index.html         # Original Flask HTML frontend
-├── requirements.txt       # Python dependencies
+├── requirements.txt       # Python dependencies (streamlit, pandas, supabase)
 ├── .gitignore
 └── .streamlit/
     ├── config.toml        # Dark theme configuration
     └── secrets.toml       # Supabase credentials (NOT committed to git)
 ```
+
+---
+
+## Architecture Notes
+
+- **Database client:** Migrated from `psycopg2` (raw TCP PostgreSQL connection) to `supabase-py` (HTTPS/REST), which is more reliable on cloud hosting platforms that may not support direct PostgreSQL connections.
+- **Connection pooling:** Not required — `supabase-py` uses the Supabase PostgREST API over HTTPS.
+- **Secrets management:** Credentials are stored in `.streamlit/secrets.toml` locally and in Streamlit Cloud's encrypted secrets manager for deployment. The `secrets.toml` file is excluded from Git via `.gitignore`.
+- **State management:** Customer selection and dialog state are managed via `st.session_state` to persist correctly across Streamlit's rerun model.
 
 ---
 
