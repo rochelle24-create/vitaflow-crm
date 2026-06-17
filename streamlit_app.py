@@ -441,85 +441,105 @@ with t_customers:
     )
     st.caption(f"Showing {len(df)} of {metrics['total']} customers  ·  click a row to view details")
 
-    # ── Customer Detail ────────────────────────────────────────────────────────
+    # Persist selected customer ID across button-click reruns
     sel = event.selection.rows
     if sel:
-        cust = df.iloc[sel[0]].to_dict()
-        am   = ACCOUNT_MANAGERS[int(cust["am_idx"])] if pd.notna(cust.get("am_idx")) else "—"
+        st.session_state.sel_cust_id = int(df.iloc[sel[0]]["id"])
 
-        st.markdown("---")
-        h1, h2 = st.columns([6, 1])
-        with h1:
-            flag_icon = "  ⚑" if cust["flagged"] else ""
-            st.markdown(f"### {cust['name']}{flag_icon}")
-            st.caption(
-                f"{cust['email']}  ·  {cust['city']}  ·  Age {cust['age']}  ·  Customer since {cust['since']}"
-            )
-        with h2:
-            st.markdown(f"**{cust['status']}** — {cust['plan']}")
+    # ── Customer Detail ────────────────────────────────────────────────────────
+    if st.session_state.get("sel_cust_id"):
+        # Fetch fresh from DB — pure Python types, no numpy issues
+        conn = get_db()
+        row = conn.execute(
+            "SELECT * FROM customers WHERE id=?", (st.session_state.sel_cust_id,)
+        ).fetchone()
+        conn.close()
 
-        if cust["flagged"]:
-            st.warning(f"⚑  **Flagged for CS Manager:** {cust['flag_note'] or 'No note provided'}")
+        if row:
+            cust = dict(row)
+            am   = ACCOUNT_MANAGERS[cust["am_idx"]] if cust["am_idx"] < len(ACCOUNT_MANAGERS) else "—"
 
-        d1, d2, d3 = st.columns(3)
-        with d1:
-            st.markdown("**Customer Info**")
-            st.markdown(f"Goals: {cust['goals'] or '—'}")
-            st.markdown(f"Role: {cust['role']}")
-            st.markdown(f"Account Manager: {am}")
-        with d2:
-            st.markdown("**Web Account**")
-            if cust["username"]:
-                st.markdown(f"Username: `@{cust['username']}`")
-            else:
-                st.markdown("No web account")
-            st.markdown(f"Last Login: {cust['last_login'] or '—'}")
-        with d3:
-            st.markdown("**Revenue & Engagement**")
-            st.markdown(f"MRR: {'$' + str(cust['mrr']) if cust['mrr'] > 0 else '—'}")
-            st.markdown(f"LTV (est.): {'$' + str(round(cust['mrr'] * 14)) if cust['mrr'] > 0 else '—'}")
-            st.markdown(f"Sessions: {cust['sessions']}")
+            st.markdown("---")
+            h1, h2 = st.columns([6, 1])
+            with h1:
+                flag_icon = "  ⚑" if cust["flagged"] else ""
+                st.markdown(f"### {cust['name']}{flag_icon}")
+                st.caption(
+                    f"{cust['email']}  ·  {cust['city']}  ·  Age {cust['age']}  ·  Customer since {cust['since']}"
+                )
+            with h2:
+                st.markdown(f"**{cust['status']}** — {cust['plan']}")
 
-        mc1, mc2, mc3, mc4 = st.columns(4)
-        mc1.metric("Health Score", f"{cust['score']}/100")
-        mc2.metric("CSAT",         f"{cust['csat']:.1f}/5")
-        mc3.metric("NPS",          f"{cust['nps']}/10")
-        mc4.metric("Sessions",     cust["sessions"])
+            if cust["flagged"]:
+                st.warning(f"⚑  **Flagged for CS Manager:** {cust['flag_note'] or 'No note provided'}")
 
-        # ── Linked incidents ──────────────────────────────────────────────────
-        linked_inc = [i for i in INCIDENTS if i["Customer"] == cust["name"]]
-        if linked_inc:
-            st.markdown(f"**Support History** ({len(linked_inc)} incident{'s' if len(linked_inc) != 1 else ''})")
-            st.dataframe(
-                pd.DataFrame(linked_inc)[["ID", "Issue", "Type", "Status", "Priority", "Date", "CSAT"]],
-                use_container_width=True,
-                hide_index=True,
-            )
+            d1, d2, d3 = st.columns(3)
+            with d1:
+                st.markdown("**Customer Info**")
+                st.markdown(f"Goals: {cust['goals'] or '—'}")
+                st.markdown(f"Role: {cust['role']}")
+                st.markdown(f"Account Manager: {am}")
+            with d2:
+                st.markdown("**Web Account**")
+                if cust["username"]:
+                    st.markdown(f"Username: `@{cust['username']}`")
+                else:
+                    st.markdown("No web account")
+                st.markdown(f"Last Login: {cust['last_login'] or '—'}")
+            with d3:
+                st.markdown("**Revenue & Engagement**")
+                st.markdown(f"MRR: {'$' + str(cust['mrr']) if cust['mrr'] > 0 else '—'}")
+                st.markdown(f"LTV (est.): {'$' + str(round(cust['mrr'] * 14)) if cust['mrr'] > 0 else '—'}")
+                st.markdown(f"Sessions: {cust['sessions']}")
 
-        # ── Linked leads ──────────────────────────────────────────────────────
-        linked_leads = [l for l in LEADS if l["Customer"] == cust["name"]]
-        if linked_leads:
-            st.markdown(f"**Sales Leads** ({len(linked_leads)})")
-            ld = pd.DataFrame(linked_leads)
-            ld["Value"] = ld["Value"].apply(lambda v: f"${v:,}")
-            st.dataframe(
-                ld[["Opportunity", "Stage", "Value", "Score", "Owner", "Next Action", "Date"]],
-                use_container_width=True,
-                hide_index=True,
-            )
+            mc1, mc2, mc3, mc4 = st.columns(4)
+            mc1.metric("Health Score", f"{cust['score']}/100")
+            mc2.metric("CSAT",         f"{cust['csat']:.1f}/5")
+            mc3.metric("NPS",          f"{cust['nps']}/10")
+            mc4.metric("Sessions",     cust["sessions"])
 
-        # ── Actions ───────────────────────────────────────────────────────────
-        st.markdown("")
-        a1, a2, _ = st.columns([1.5, 1.8, 5])
-        with a1:
-            flag_label = "⚑  Update Flag" if cust["flagged"] else "⚐  Flag for CS"
-            if st.button(flag_label, key="btn_flag"):
-                dialog_flag_customer(int(cust["id"]))
-        with a2:
-            if st.button("🗑  Remove Customer", key="btn_remove", type="secondary"):
-                db_remove_customer(int(cust["id"]))
-                st.toast(f"{cust['name']} removed from CRM.")
-                st.rerun()
+            # ── Linked incidents ──────────────────────────────────────────────
+            linked_inc = [i for i in INCIDENTS if i["Customer"] == cust["name"]]
+            if linked_inc:
+                st.markdown(f"**Support History** ({len(linked_inc)} incident{'s' if len(linked_inc) != 1 else ''})")
+                st.dataframe(
+                    pd.DataFrame(linked_inc)[["ID", "Issue", "Type", "Status", "Priority", "Date", "CSAT"]],
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+            # ── Linked leads ──────────────────────────────────────────────────
+            linked_leads = [l for l in LEADS if l["Customer"] == cust["name"]]
+            if linked_leads:
+                st.markdown(f"**Sales Leads** ({len(linked_leads)})")
+                ld = pd.DataFrame(linked_leads)
+                ld["Value"] = ld["Value"].apply(lambda v: f"${v:,}")
+                st.dataframe(
+                    ld[["Opportunity", "Stage", "Value", "Score", "Owner", "Next Action", "Date"]],
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+            # ── Actions ───────────────────────────────────────────────────────
+            st.markdown("")
+            a1, a2, a3, _ = st.columns([1.5, 1.8, 1.2, 3])
+            with a1:
+                flag_label = "⚑  Update Flag" if cust["flagged"] else "⚐  Flag for CS"
+                if st.button(flag_label, key="btn_flag"):
+                    dialog_flag_customer(cust["id"])
+            with a2:
+                if st.button("🗑  Remove Customer", key="btn_remove", type="secondary"):
+                    db_remove_customer(cust["id"])
+                    st.session_state.sel_cust_id = None
+                    st.toast(f"{cust['name']} removed from CRM.")
+                    st.rerun()
+            with a3:
+                if st.button("✕  Close", key="btn_close"):
+                    st.session_state.sel_cust_id = None
+                    st.rerun()
+        else:
+            # Customer was deleted — clear stale selection
+            st.session_state.sel_cust_id = None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
