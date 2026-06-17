@@ -246,19 +246,33 @@ def dialog_add_customer():
 
 
 @st.dialog("Flag Customer for CS Manager")
-def dialog_flag_customer(cust):
-    if cust["flagged"]:
-        st.warning(f"**Currently flagged:** {cust['flag_note'] or 'No note provided'}")
+def dialog_flag_customer(customer_id: int):
+    # Fetch fresh from DB — avoids numpy type serialization issues
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id, name, flagged, flag_note FROM customers WHERE id=?", (customer_id,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        st.error("Customer not found.")
+        return
+
+    name      = row["name"]
+    flagged   = row["flagged"]
+    flag_note = row["flag_note"] or ""
+
+    if flagged:
+        st.warning(f"**Currently flagged:** {flag_note or 'No note provided'}")
         col1, col2 = st.columns(2)
         with col1:
             if st.button("✓ Resolve Flag", type="primary", use_container_width=True):
-                db_resolve_flag(int(cust["id"]))
+                db_resolve_flag(customer_id)
                 st.rerun()
         with col2:
             if st.button("Cancel", use_container_width=True):
                 st.rerun()
     else:
-        st.write(f"Flag **{cust['name']}** for CS Manager review.")
+        st.write(f"Flag **{name}** for CS Manager review.")
         note = st.text_area(
             "Reason / note for CS Manager",
             placeholder="Describe why this customer needs attention...",
@@ -266,7 +280,7 @@ def dialog_flag_customer(cust):
         col1, col2 = st.columns(2)
         with col1:
             if st.button("⚑ Flag for CS Manager", type="primary", use_container_width=True):
-                db_toggle_flag(int(cust["id"]), note)
+                db_toggle_flag(customer_id, note)
                 st.rerun()
         with col2:
             if st.button("Cancel", use_container_width=True):
@@ -500,7 +514,7 @@ with t_customers:
         with a1:
             flag_label = "⚑  Update Flag" if cust["flagged"] else "⚐  Flag for CS"
             if st.button(flag_label, key="btn_flag"):
-                dialog_flag_customer(cust)
+                dialog_flag_customer(int(cust["id"]))
         with a2:
             if st.button("🗑  Remove Customer", key="btn_remove", type="secondary"):
                 db_remove_customer(int(cust["id"]))
