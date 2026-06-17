@@ -1,12 +1,15 @@
 """
 VitaFlow CRM — Streamlit App
 Run:  streamlit run streamlit_app.py
+Requires .streamlit/secrets.toml with:
+  [supabase]
+  connection_string = "postgresql://..."
 """
-import os
-import sqlite3
 from datetime import datetime
 
 import pandas as pd
+import psycopg2
+import psycopg2.extras
 import streamlit as st
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -82,21 +85,19 @@ ACTIVITIES = [
 ]
 
 # ── Database ──────────────────────────────────────────────────────────────────
-DB_PATH = "vitaflow.db"
 
-
-def get_db():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+def get_connection():
+    """Open a fresh psycopg2 connection using Streamlit secrets."""
+    return psycopg2.connect(st.secrets["supabase"]["connection_string"])
 
 
 def init_db():
     from data import INITIAL_CUSTOMERS
-    conn = get_db()
-    conn.execute("""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS customers (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            id          SERIAL PRIMARY KEY,
             name        TEXT    NOT NULL,
             email       TEXT    NOT NULL,
             status      TEXT    DEFAULT 'Trial',
@@ -117,22 +118,25 @@ def init_db():
             am_idx      INTEGER DEFAULT 0,
             flagged     INTEGER DEFAULT 0,
             flag_note   TEXT,
-            created_at  TEXT    DEFAULT CURRENT_TIMESTAMP
+            created_at  TEXT    DEFAULT NOW()::TEXT
         )
     """)
-    if conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0] == 0:
+    conn.commit()
+    cur.execute("SELECT COUNT(*) FROM customers")
+    if cur.fetchone()[0] == 0:
         for c in INITIAL_CUSTOMERS:
-            conn.execute(
+            cur.execute(
                 """INSERT INTO customers
                    (name,email,status,plan,mrr,score,csat,since,city,age,
                     goals,sessions,nps,role,username,last_login,login_age,am_idx)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                 (c["name"], c["email"], c["status"], c["plan"], c["mrr"],
                  c["score"], c["csat"], c["since"], c["city"], c["age"],
                  c["goals"], c["sessions"], c["nps"], c["role"],
                  c.get("username"), c.get("lastLogin"), c.get("loginAge", 999), c["amIdx"]),
             )
         conn.commit()
+    cur.close()
     conn.close()
 
 
@@ -143,15 +147,15 @@ if "db_ready" not in st.session_state:
 # ── DB helpers ────────────────────────────────────────────────────────────────
 
 def fetch_customers():
-    conn = get_db()
-    df = pd.read_sql_query("SELECT * FROM customers ORDER BY id", conn)
+    conn = get_connection()
+    df = pd.read_sql("SELECT * FROM customers ORDER BY id", conn)
     conn.close()
     return df
 
 
 def fetch_metrics():
-    conn = get_db()
-    df = pd.read_sql_query("SELECT mrr,csat,username,login_age,flagged FROM customers", conn)
+    conn = get_connection()
+    df = pd.read_sql("SELECT mrr,csat,username,login_age,flagged FROM customers", conn)
     conn.close()
     if df.empty:
         return dict(total=0, mrr=0, web_users=0, recent_logins=0, avg_csat=0.0, flagged=0)
@@ -167,43 +171,52 @@ def fetch_metrics():
 
 
 def db_add_customer(data):
-    conn = get_db()
-    conn.execute(
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
         """INSERT INTO customers
            (name,email,status,plan,mrr,score,csat,since,city,age,goals,role,username,am_idx)
-           VALUES (?,?,?,?,?,50,3.5,?,?,?,?,?,?,?)""",
+           VALUES (%s,%s,%s,%s,%s,50,3.5,%s,%s,%s,%s,%s,%s,%s)""",
         (data["name"], data["email"], data["status"], data["plan"], data["mrr"],
          data["since"], data["city"], data["age"], data["goals"],
          data["role"], data["username"] or None, data["am_idx"]),
     )
     conn.commit()
+    cur.close()
     conn.close()
 
 
 def db_remove_customer(cid):
-    conn = get_db()
-    conn.execute("DELETE FROM customers WHERE id=?", (cid,))
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM customers WHERE id=%s", (cid,))
     conn.commit()
+    cur.close()
     conn.close()
 
 
 def db_toggle_flag(cid, note=""):
-    conn = get_db()
-    row = conn.execute("SELECT flagged FROM customers WHERE id=?", (cid,)).fetchone()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT flagged FROM customers WHERE id=%s", (cid,))
+    row = cur.fetchone()
     if row:
-        new_flag = 0 if row["flagged"] else 1
-        conn.execute(
-            "UPDATE customers SET flagged=?,flag_note=? WHERE id=?",
+        new_flag = 0 if row[0] else 1
+        cur.execute(
+            "UPDATE customers SET flagged=%s, flag_note=%s WHERE id=%s",
             (new_flag, note if new_flag else None, cid),
         )
         conn.commit()
+    cur.close()
     conn.close()
 
 
 def db_resolve_flag(cid):
-    conn = get_db()
-    conn.execute("UPDATE customers SET flagged=0,flag_note=NULL WHERE id=?", (cid,))
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("UPDATE customers SET flagged=0, flag_note=NULL WHERE id=%s", (cid,))
     conn.commit()
+    cur.close()
     conn.close()
 
 
@@ -247,11 +260,11 @@ def dialog_add_customer():
 
 @st.dialog("Flag Customer for CS Manager")
 def dialog_flag_customer(customer_id: int):
-    # Fetch fresh from DB — avoids numpy type serialization issues
-    conn = get_db()
-    row = conn.execute(
-        "SELECT id, name, flagged, flag_note FROM customers WHERE id=?", (customer_id,)
-    ).fetchone()
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT id, name, flagged, flag_note FROM customers WHERE id=%s", (customer_id,))
+    row = cur.fetchone()
+    cur.close()
     conn.close()
     if not row:
         st.error("Customer not found.")
@@ -471,11 +484,11 @@ with t_customers:
 
     # ── Customer Detail ────────────────────────────────────────────────────────
     if st.session_state.get("sel_cust_id"):
-        # Fetch fresh from DB — pure Python types, no numpy issues
-        conn = get_db()
-        row = conn.execute(
-            "SELECT * FROM customers WHERE id=?", (st.session_state.sel_cust_id,)
-        ).fetchone()
+        conn = get_connection()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT * FROM customers WHERE id=%s", (st.session_state.sel_cust_id,))
+        row = cur.fetchone()
+        cur.close()
         conn.close()
 
         if row:
