@@ -424,13 +424,11 @@ with t_customers:
         "⚑":              df["flagged"].apply(lambda f: "⚑" if f else "").values,
     })
 
-    event = st.dataframe(
+    st.dataframe(
         disp,
         use_container_width=True,
         hide_index=True,
         height=460,
-        on_select="rerun",
-        selection_mode="single-row",
         column_config={
             "Health": st.column_config.ProgressColumn(
                 "Health", min_value=0, max_value=100, format="%d"
@@ -439,12 +437,22 @@ with t_customers:
             "MRR ($)": st.column_config.NumberColumn("MRR ($)", format="$%d"),
         },
     )
-    st.caption(f"Showing {len(df)} of {metrics['total']} customers  ·  click a row to view details")
+    st.caption(f"Showing {len(df)} of {metrics['total']} customers")
 
-    # Persist selected customer ID across button-click reruns
-    sel = event.selection.rows
-    if sel:
-        st.session_state.sel_cust_id = int(df.iloc[sel[0]]["id"])
+    # ── Customer selector ─────────────────────────────────────────────────────
+    options = ["— Select a customer to view details —"] + [
+        f"{row['name']}  ({row['status']}, {row['plan']})"
+        for _, row in df.iterrows()
+    ]
+    selected_label = st.selectbox(
+        "Customer detail", options, label_visibility="collapsed",
+        key="cust_selector",
+    )
+    if selected_label != "— Select a customer to view details —":
+        selected_name = selected_label.split("  (")[0]
+        match = df[df["name"] == selected_name]
+        if not match.empty:
+            st.session_state.sel_cust_id = int(match.iloc[0]["id"])
 
     # ── Customer Detail ────────────────────────────────────────────────────────
     if st.session_state.get("sel_cust_id"):
@@ -531,15 +539,18 @@ with t_customers:
                 if st.button("🗑  Remove Customer", key="btn_remove", type="secondary"):
                     db_remove_customer(cust["id"])
                     st.session_state.sel_cust_id = None
+                    st.session_state.cust_selector = "— Select a customer to view details —"
                     st.toast(f"{cust['name']} removed from CRM.")
                     st.rerun()
             with a3:
                 if st.button("✕  Close", key="btn_close"):
                     st.session_state.sel_cust_id = None
+                    st.session_state.cust_selector = "— Select a customer to view details —"
                     st.rerun()
         else:
             # Customer was deleted — clear stale selection
             st.session_state.sel_cust_id = None
+            st.session_state.cust_selector = "— Select a customer to view details —"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
