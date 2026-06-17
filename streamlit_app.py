@@ -97,21 +97,22 @@ def get_supabase():
 def init_db():
     from data import INITIAL_CUSTOMERS
     sb = get_supabase()
-    resp = sb.table("customers").select("id").limit(1).execute()
-    if not resp.data:
-        rows = [
-            {
-                "name": c["name"], "email": c["email"], "status": c["status"],
-                "plan": c["plan"], "mrr": c["mrr"], "score": c["score"],
-                "csat": c["csat"], "since": c["since"], "city": c["city"],
-                "age": c["age"], "goals": c["goals"], "sessions": c["sessions"],
-                "nps": c["nps"], "role": c["role"],
-                "username": c.get("username"), "last_login": c.get("lastLogin"),
-                "login_age": c.get("loginAge", 999), "am_idx": c["amIdx"],
-            }
-            for c in INITIAL_CUSTOMERS
-        ]
-        sb.table("customers").insert(rows).execute()
+    resp = sb.table("customers").select("id", count="exact").execute()
+    if (resp.count or 0) >= 50:
+        return
+    rows = [
+        {
+            "name": c["name"], "email": c["email"], "status": c["status"],
+            "plan": c["plan"], "mrr": c["mrr"], "score": c["score"],
+            "csat": c["csat"], "since": c["since"], "city": c["city"],
+            "age": c["age"], "goals": c["goals"], "sessions": c["sessions"],
+            "nps": c["nps"], "role": c["role"],
+            "username": c.get("username"), "last_login": c.get("lastLogin"),
+            "login_age": c.get("loginAge", 999), "am_idx": c["amIdx"],
+        }
+        for c in INITIAL_CUSTOMERS
+    ]
+    sb.table("customers").upsert(rows, on_conflict="email").execute()
 
 
 if "db_ready" not in st.session_state:
