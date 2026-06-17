@@ -6,6 +6,26 @@ Live demo: [vitaflow-crm on Streamlit Cloud](https://vitaflow-crm-rochelle24crea
 
 ---
 
+## Live Persistent Database — Supabase (PostgreSQL)
+
+> **This deployed app is connected to a live cloud database.**
+>
+> Every change made through the app is written to [Supabase](https://supabase.com) (PostgreSQL) in real time and persists permanently across sessions, restarts, and redeploys.
+
+| Operation | What happens |
+|---|---|
+| ➕ **Add a new customer** | Saved permanently to Supabase — visible to anyone who opens the app |
+| 🗑 **Remove a customer** | Deleted permanently from Supabase |
+| ⚑ **Flag a customer for CS** | Flag and note saved permanently to Supabase |
+| 🔄 **App restarts or redeploys** | All data survives — nothing is lost |
+| 💻 **Open on a different device** | Same data — it's a shared live database |
+
+The 91 seed customers were loaded once on first launch. Every addition or removal since then is real and persistent.
+
+This demonstrates a key concept in production web applications: **stateless frontend + persistent backend database**. The Streamlit app itself holds no data — it is purely a UI that reads from and writes to Supabase on every interaction.
+
+---
+
 ## Disclaimer
 
 > **All names, data, and company information in this project are entirely fictional and were generated for educational purposes only.**
