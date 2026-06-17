@@ -444,15 +444,30 @@ with t_customers:
         f"{row['name']}  ({row['status']}, {row['plan']})"
         for _, row in df.iterrows()
     ]
+
+    # Determine which option index to show (controlled via sel_cust_id, not widget key)
+    default_idx = 0
+    if st.session_state.get("sel_cust_id"):
+        match = df[df["id"] == st.session_state.sel_cust_id]
+        if not match.empty:
+            r = match.iloc[0]
+            label = f"{r['name']}  ({r['status']}, {r['plan']})"
+            if label in options:
+                default_idx = options.index(label)
+
     selected_label = st.selectbox(
-        "Customer detail", options, label_visibility="collapsed",
-        key="cust_selector",
+        "Customer detail", options, index=default_idx,
+        label_visibility="collapsed",
     )
+
+    # Update sel_cust_id from selectbox choice
     if selected_label != "— Select a customer to view details —":
         selected_name = selected_label.split("  (")[0]
         match = df[df["name"] == selected_name]
         if not match.empty:
             st.session_state.sel_cust_id = int(match.iloc[0]["id"])
+    else:
+        st.session_state.sel_cust_id = None
 
     # ── Customer Detail ────────────────────────────────────────────────────────
     if st.session_state.get("sel_cust_id"):
@@ -539,18 +554,15 @@ with t_customers:
                 if st.button("🗑  Remove Customer", key="btn_remove", type="secondary"):
                     db_remove_customer(cust["id"])
                     st.session_state.sel_cust_id = None
-                    st.session_state.cust_selector = "— Select a customer to view details —"
                     st.toast(f"{cust['name']} removed from CRM.")
                     st.rerun()
             with a3:
                 if st.button("✕  Close", key="btn_close"):
                     st.session_state.sel_cust_id = None
-                    st.session_state.cust_selector = "— Select a customer to view details —"
                     st.rerun()
         else:
             # Customer was deleted — clear stale selection
             st.session_state.sel_cust_id = None
-            st.session_state.cust_selector = "— Select a customer to view details —"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
