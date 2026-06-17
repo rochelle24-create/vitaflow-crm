@@ -21,11 +21,11 @@ Live demo: [vitaflow-crm on Streamlit Cloud](https://vitaflow-crm-rochelle24crea
 
 VitaFlow CRM is a fully functional customer dashboard with:
 
-- **Customers tab** — filterable table of 92 fake customers with health scores, CSAT, MRR, plans, and roles. Click any row to view a full customer profile with linked incidents and sales leads.
+- **Customers tab** — filterable table of 92 fake customers with health scores, CSAT, MRR, plans, and roles. Select any customer from the dropdown to view their full profile, linked support incidents, and sales leads.
 - **Sales Leads tab** — 14 fictional sales opportunities with pipeline stage, value, and owner tracking.
-- **Support Incidents tab** — 20 fictional support tickets with status, priority, and CSAT tracking.
+- **Support Incidents tab** — 20 fictional support tickets with type, status, priority, and CSAT tracking.
 - **Activity tab** — a chronological feed of recent CRM events.
-- **Add / Remove / Flag customers** — full CRUD operations backed by a SQLite database.
+- **Add / Remove / Flag customers** — full CRUD operations with persistent storage backed by Supabase (PostgreSQL).
 
 ---
 
@@ -34,10 +34,10 @@ VitaFlow CRM is a fully functional customer dashboard with:
 | Layer | Technology |
 |---|---|
 | App framework | [Streamlit](https://streamlit.io) (Python) |
-| Backend (original) | [Flask](https://flask.palletsprojects.com) (Python) |
-| Database | SQLite via Python's built-in `sqlite3` |
+| Backend (original prototype) | [Flask](https://flask.palletsprojects.com) (Python) |
+| Database | [Supabase](https://supabase.com) (PostgreSQL) via `psycopg2` |
 | Data manipulation | [pandas](https://pandas.pydata.org) |
-| Frontend (original) | HTML, CSS, JavaScript |
+| Frontend (original prototype) | HTML, CSS, JavaScript |
 | Version control | Git / GitHub |
 | Hosting | Streamlit Community Cloud |
 
@@ -69,6 +69,8 @@ All data in this project is **synthetically generated** — no real datasets wer
 
 ## How to Run Locally
 
+**Prerequisites:** A Supabase project with the `customers` table (auto-created on first run).
+
 ```bash
 # 1. Clone the repo
 git clone https://github.com/rochelle24-create/vitaflow-crm.git
@@ -81,11 +83,17 @@ conda activate vitaflow-crm
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. Run the Streamlit app
+# 4. Add your Supabase connection string
+# Create .streamlit/secrets.toml with:
+# [supabase]
+# connection_string = "postgresql://postgres:PASSWORD@db.YOUR_REF.supabase.co:5432/postgres"
+
+# 5. Run the Streamlit app
 streamlit run streamlit_app.py
 ```
 
-Then open [http://localhost:8501](http://localhost:8501) in your browser.
+Then open [http://localhost:8501](http://localhost:8501) in your browser.  
+On first run the app will automatically create the `customers` table and seed it with 92 records.
 
 ---
 
@@ -93,7 +101,7 @@ Then open [http://localhost:8501](http://localhost:8501) in your browser.
 
 ```
 vitaflow-crm/
-├── streamlit_app.py       # Main Streamlit application
+├── streamlit_app.py       # Main Streamlit application (Supabase-backed)
 ├── data.py                # Synthetic customer seed data
 ├── app.py                 # Original Flask backend (kept for reference)
 ├── templates/
@@ -101,7 +109,8 @@ vitaflow-crm/
 ├── requirements.txt       # Python dependencies
 ├── .gitignore
 └── .streamlit/
-    └── config.toml        # Dark theme configuration
+    ├── config.toml        # Dark theme configuration
+    └── secrets.toml       # Supabase credentials (NOT committed to git)
 ```
 
 ---
