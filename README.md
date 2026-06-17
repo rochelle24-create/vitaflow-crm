@@ -45,15 +45,17 @@ VitaFlow CRM is a fully functional customer dashboard with:
 
 ## Datasets
 
-All data in this project is **synthetically generated** — no real datasets were used.
+All seed data in this project is **synthetically generated** — no real datasets were used.
 
-| Dataset | Description | Size |
-|---|---|---|
-| Customers | Fictional health & wellness app users with names, emails, cities, plans, MRR, health scores, CSAT, NPS, session counts, login history, and wellness goals | 92 records |
-| Account Managers | Fictional CRM account managers assigned to customers | 10 records |
-| Sales Leads | Fictional upsell and expansion opportunities linked to customers | 14 records |
-| Support Incidents | Fictional customer support tickets with type, status, and priority | 20 records |
-| Activity Feed | Fictional recent CRM events (upgrades, logins, churn alerts, etc.) | 15 entries |
+| Dataset | Description | Size | Storage |
+|---|---|---|---|
+| Customers | Fictional health & wellness app users with names, emails, cities, plans, MRR, health scores, CSAT, NPS, session counts, login history, and wellness goals | 92 seed records | **Supabase (PostgreSQL)** — live, persistent. New customers added through the app are saved permanently. |
+| Account Managers | Fictional CRM account managers assigned to customers | 10 records | Static (in code) |
+| Sales Leads | Fictional upsell and expansion opportunities linked to customers | 14 records | Static (in code) |
+| Support Incidents | Fictional customer support tickets with type, status, and priority | 20 records | Static (in code) |
+| Activity Feed | Fictional recent CRM events (upgrades, logins, churn alerts, etc.) | 15 entries | Static (in code) |
+
+> The **Customers** dataset is the only live dataset. All create, update (flag), and delete operations are persisted to Supabase and survive app restarts. The remaining datasets are static and exist only for display purposes.
 
 ---
 
